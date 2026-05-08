@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 12345
+      POSTGRES_DB: shopbuilder
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/shopbuilder
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: changeme-production-secret-32-chars-min
+      JWT_REFRESH_SECRET: changeme-refresh-secret-32-chars-min
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      PORT: 3000
+      NODE_ENV: production
+      CORS_ORIGINS: http://localhost:3000
+      APP_URL: http://localhost:3000
+      MERCHANT_1_DB_URL: postgresql://postgres:postgres@postgres:5432/shopbuilder
+      MERCHANT_2_DB_URL: postgresql://postgres:postgres@postgres:5432/shopbuilder
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy && node src/index.js"
+
+  worker:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/shopbuilder
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: changeme-production-secret-32-chars-min
+      JWT_REFRESH_SECRET: changeme-refresh-secret-32-chars-min
+      NODE_ENV: production
+      APP_URL: http://localhost:3000
+      GMAIL_USER: ${GMAIL_USER:-}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-ShopBuilder <noreply@shopbuilder.com>}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: node src/workers/index.js
+
+volumes:
+  postgres_data:
+  redis_data:

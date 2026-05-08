@@ -1,0 +1,473 @@
+openapi: "3.0.3"
+info:
+  title: ShopBuilder API
+  version: "1.0.0"
+  description: Multi-tenant e-commerce platform backend
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local development
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+            code:
+              type: integer
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        username:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, MERCHANT, CUSTOMER]
+
+    Tenant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, PENDING]
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        basePrice:
+          type: number
+        isActive:
+          type: boolean
+
+    ProductVariant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        size:
+          type: string
+        color:
+          type: string
+        material:
+          type: string
+        price:
+          type: number
+        stock:
+          type: integer
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      tags: [System]
+      responses:
+        "200":
+          description: OK
+
+  /auth/register:
+    post:
+      summary: Register a new user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, username, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: merchant@example.com
+                username:
+                  type: string
+                  example: john_merchant
+                password:
+                  type: string
+                  example: Secret@123
+                role:
+                  type: string
+                  enum: [MERCHANT, CUSTOMER]
+                  default: CUSTOMER
+      responses:
+        "201":
+          description: User created
+        "409":
+          description: Email or username already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Validation error
+
+  /auth/login:
+    post:
+      summary: Login and receive tokens
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  example: merchant@example.com
+                password:
+                  type: string
+                  example: Secret@123
+      responses:
+        "200":
+          description: Tokens issued
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  accessToken: eyJhbGci...
+                  refreshToken: eyJhbGci...
+                  user:
+                    id: uuid
+                    email: merchant@example.com
+                    role: MERCHANT
+        "401":
+          description: Invalid credentials
+        "429":
+          description: Rate limit exceeded
+
+  /auth/refresh:
+    post:
+      summary: Refresh access token
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        "200":
+          description: New access token
+        "401":
+          description: Invalid or expired refresh token
+
+  /auth/logout:
+    post:
+      summary: Logout and revoke refresh token
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        "200":
+          description: Logged out
+
+  /auth/me:
+    get:
+      summary: Get current user
+      tags: [Auth]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Current user info
+        "401":
+          description: Unauthorized
+
+  /tenants/onboard:
+    post:
+      summary: Onboard new merchant tenant
+      tags: [Tenants]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, slug]
+              properties:
+                name:
+                  type: string
+                  example: My Shop
+                slug:
+                  type: string
+                  example: my-shop
+      responses:
+        "201":
+          description: Tenant created
+        "409":
+          description: Slug already taken
+
+  /tenants/me:
+    get:
+      summary: Get current merchant's tenant
+      tags: [Tenants]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Tenant info
+        "403":
+          description: Forbidden - not a merchant
+
+  /tenants/webhooks:
+    post:
+      summary: Register a webhook
+      tags: [Tenants]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, eventType]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                eventType:
+                  type: string
+                  enum: [PRODUCT_CREATED, PRODUCT_UPDATED, ORDER_CREATED, ORDER_UPDATED, VARIANT_STOCK_UPDATED]
+      responses:
+        "201":
+          description: Webhook registered
+    get:
+      summary: List tenant webhooks
+      tags: [Tenants]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of webhooks
+
+  /products:
+    post:
+      summary: Create a product
+      tags: [Products]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, basePrice]
+              properties:
+                name:
+                  type: string
+                  example: Classic T-Shirt
+                description:
+                  type: string
+                basePrice:
+                  type: number
+                  example: 29.99
+      responses:
+        "201":
+          description: Product created
+        "403":
+          description: Merchant role required
+    get:
+      summary: List products (paginated)
+      tags: [Products]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Paginated product list
+
+  /products/{productId}:
+    get:
+      summary: Get product with variants
+      tags: [Products]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Product detail
+        "404":
+          description: Not found
+    patch:
+      summary: Update product
+      tags: [Products]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                basePrice:
+                  type: number
+                isActive:
+                  type: boolean
+      responses:
+        "200":
+          description: Product updated
+
+  /products/{productId}/variants/generate:
+    post:
+      summary: Generate SKU variant matrix (Size × Color × Material)
+      tags: [Products]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [basePrice]
+              properties:
+                sizes:
+                  type: array
+                  items:
+                    type: string
+                  example: [S, M, L, XL]
+                colors:
+                  type: array
+                  items:
+                    type: string
+                  example: [Red, Blue, Black]
+                materials:
+                  type: array
+                  items:
+                    type: string
+                  example: [Cotton, Polyester]
+                basePrice:
+                  type: number
+                  example: 29.99
+                initialStock:
+                  type: integer
+                  example: 100
+      responses:
+        "201":
+          description: Variants generated
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  count: 24
+                  variants:
+                    - sku: ABCD1234-S-RED-COTTON
+                      size: S
+                      color: Red
+                      material: Cotton
+                      stock: 100
+
+  /products/variants/{variantId}/stock:
+    patch:
+      summary: Adjust variant stock
+      tags: [Products]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [delta]
+              properties:
+                delta:
+                  type: integer
+                  example: -5
+      responses:
+        "200":
+          description: Stock updated
+        "409":
+          description: Insufficient stock
