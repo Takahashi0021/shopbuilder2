@@ -1,0 +1,7 @@
+# .deployrocks.yml
+type: node
+build:
+  command: npm install && npx prisma generate
+run:
+  command: npm start
+  port: 3000
