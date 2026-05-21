@@ -3,15 +3,15 @@ services:
     image: postgres:15-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 12345
-      POSTGRES_DB: shopbuilder
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-shopbuilder}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -33,20 +33,23 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${BACKEND_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/shopbuilder
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-shopbuilder}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: changeme-production-secret-32-chars-min
-      JWT_REFRESH_SECRET: changeme-refresh-secret-32-chars-min
-      JWT_ACCESS_EXPIRES_IN: 15m
-      JWT_REFRESH_EXPIRES_IN: 7d
+      JWT_SECRET: ${JWT_SECRET:-changeme-production-secret-min-32-chars}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-changeme-refresh-secret-min-32-chars}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
       PORT: 3000
-      NODE_ENV: production
-      CORS_ORIGINS: http://localhost:3000
-      APP_URL: http://localhost:3000
-      MERCHANT_1_DB_URL: postgresql://postgres:postgres@postgres:5432/shopbuilder
-      MERCHANT_2_DB_URL: postgresql://postgres:postgres@postgres:5432/shopbuilder
+      NODE_ENV: ${NODE_ENV:-production}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:80,http://localhost:5173}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      GMAIL_USER: ${GMAIL_USER:-}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-ShopBuilder <noreply@shopbuilder.com>}
+      MERCHANT_1_DB_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-shopbuilder}
+      MERCHANT_2_DB_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-shopbuilder}
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,25 +57,13 @@ services:
         condition: service_healthy
     command: sh -c "npx prisma migrate deploy && node src/index.js"
 
-  worker:
-    build: .
+  frontend:
+    build: ./frontend
     restart: unless-stopped
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/shopbuilder
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: changeme-production-secret-32-chars-min
-      JWT_REFRESH_SECRET: changeme-refresh-secret-32-chars-min
-      NODE_ENV: production
-      APP_URL: http://localhost:3000
-      GMAIL_USER: ${GMAIL_USER:-}
-      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
-      EMAIL_FROM: ${EMAIL_FROM:-ShopBuilder <noreply@shopbuilder.com>}
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: node src/workers/index.js
+      - app
 
 volumes:
   postgres_data:

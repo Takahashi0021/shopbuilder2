@@ -8,8 +8,10 @@ const registerSchema = z.object({
     .regex(/[A-Z]/, "Must contain uppercase")
     .regex(/[0-9]/, "Must contain number")
     .regex(/[^a-zA-Z0-9]/, "Must contain special character"),
-    role: z.enum(["ADMIN", "MERCHANT", "CUSTOMER"]).default("CUSTOMER"),
-  });
+  role: z.enum(["ADMIN", "MERCHANT", "CUSTOMER", "Admin", "Merchant", "Customer"])
+    .transform(val => val.toUpperCase()) 
+    .default("CUSTOMER"),
+});
 
 const loginSchema = z.object({
   email: z.string().email(),

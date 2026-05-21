@@ -16,7 +16,7 @@ async function onboardTenant({ name, slug, ownerId, dbUrl }) {
     throw err;
   }
 
-  const resolvedDbUrl = dbUrl || MOCK_TENANT_DBS[slug] || env.DATABASE_URL;
+  const resolvedDbUrl = dbUrl || env.DATABASE_URL;
 
   const tenant = await prisma.$transaction(async (tx) => {
     const t = await tx.tenant.create({
@@ -24,7 +24,7 @@ async function onboardTenant({ name, slug, ownerId, dbUrl }) {
     });
     await tx.user.update({
       where: { id: ownerId },
-      data: { tenantId: t.id, role: "MERCHANT" },
+      data: { role: "MERCHANT" },
     });
     return t;
   });

@@ -25,7 +25,7 @@ model User {
 
   refreshTokens RefreshToken[]
   tenant        Tenant?        @relation(fields: [tenantId], references: [id])
-  ownedTenant   Tenant?        @relation("TenantOwner")
+  ownedTenants  Tenant[]       @relation("TenantOwner")
   orders        Order[]
 
   @@map("users")
@@ -48,7 +48,7 @@ model Tenant {
   id          String       @id @default(uuid())
   name        String
   slug        String       @unique
-  ownerId     String       @unique @map("owner_id")
+  ownerId     String       @map("owner_id")
   dbUrl       String       @map("db_url")
   status      TenantStatus @default(ACTIVE)
   maxPoolSize Int          @default(10) @map("max_pool_size")

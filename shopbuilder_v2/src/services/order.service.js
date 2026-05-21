@@ -69,7 +69,7 @@ async function createOrder({ tenantId, customerId, items, notes }) {
 
   const customer = await prisma.user.findUnique({ where: { id: customerId } });
 
-  await addEmailJob("order_confirmed", {
+   addEmailJob("order_confirmed", {
     to: customer.email,
     type: "order_confirmed",
     data: {
@@ -97,7 +97,8 @@ async function createOrder({ tenantId, customerId, items, notes }) {
 
 async function listOrders({ tenantId, customerId, cursor, limit = 20 }) {
   const take = Math.min(limit, 100);
-  const where = { tenantId };
+  const where = {};
+  if (tenantId) where.tenantId = tenantId;
   if (customerId) where.customerId = customerId;
 
   const orders = await prisma.order.findMany({
@@ -150,7 +151,7 @@ async function updateOrderStatus(orderId, tenantId, status) {
     include: { customer: true },
   });
 
-  await addEmailJob("order_status_update", {
+addEmailJob("order_status_update", {
     to: updated.customer.email,
     type: "order_status_update",
     data: { orderId: orderId.slice(0, 8).toUpperCase(), status },

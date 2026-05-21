@@ -37,11 +37,15 @@ async function suspendTenant(tenantId, reason) {
     data: { status: "SUSPENDED" },
   });
 
-  await addEmailJob("tenant_suspended", {
-    to: tenant.owner.email,
-    type: "tenant_suspended",
-    data: { shopName: tenant.name, reason },
+  const emailService = require("./email.service");
+try {
+  await emailService.sendTenantSuspendedEmail(tenant.owner.email, {
+    shopName: tenant.name,
+    reason,
   });
+} catch (e) {
+  console.error("Email error:", e.message);
+}
 
   return { message: "Tenant suspended" };
 }

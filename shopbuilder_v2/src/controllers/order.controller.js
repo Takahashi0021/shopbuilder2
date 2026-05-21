@@ -22,9 +22,17 @@ async function listOrders(req, res, next) {
   try {
     const { cursor, limit } = req.query;
     const isCustomer = req.user.role === "CUSTOMER";
+    const isMerchant = req.user.role === "MERCHANT";
+
+    let tenantId = undefined;
+    if (isMerchant && req.user.tenantId) {
+      tenantId = req.user.tenantId;
+    } else if (isCustomer) {
+      tenantId = undefined;
+    }
 
     const result = await orderService.listOrders({
-      tenantId: req.user.tenantId,
+      tenantId,
       customerId: isCustomer ? req.user.userId : undefined,
       cursor,
       limit: limit ? parseInt(limit) : 20,
@@ -35,7 +43,11 @@ async function listOrders(req, res, next) {
 
 async function getOne(req, res, next) {
   try {
-    const order = await orderService.getOrder(req.params.orderId, req.user.userId, req.user.role);
+    const order = await orderService.getOrder(
+      req.params.orderId,
+      req.user.userId,
+      req.user.role
+    );
     return success(res, { order });
   } catch (err) { next(err); }
 }

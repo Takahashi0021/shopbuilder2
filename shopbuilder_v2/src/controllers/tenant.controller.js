@@ -15,11 +15,11 @@ async function onboard(req, res, next) {
 
 async function getMyTenant(req, res, next) {
   try {
-    if (!req.user.tenantId) {
-      return error(res, "No tenant associated with this account", 404);
-    }
-    const tenant = await tenantService.getTenant(req.user.tenantId);
-    return success(res, { tenant });
+    const tenants = await require("../config/database").tenant.findMany({
+      where: { ownerId: req.user.userId },
+      select: { id: true, name: true, slug: true, status: true, createdAt: true },
+    });
+    return success(res, { tenants });
   } catch (err) {
     next(err);
   }

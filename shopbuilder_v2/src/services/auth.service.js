@@ -1,15 +1,35 @@
 const bcrypt = require("bcryptjs");
-const { v4: uuidv4 } = require("uuid");
 const crypto = require("crypto");
 const prisma = require("../config/database");
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require("../utils/jwt");
-const { addEmailJob } = require("../workers/queue");
+const emailService = require("./email.service");
 
 async function register({ email, username, password, role }) {
   const existing = await prisma.user.findFirst({
     where: { OR: [{ email }, { username }] },
   });
+
   if (existing) {
+    if (!existing.isActive) {
+      const passwordHash = await bcrypt.hash(password, 12);
+      const verificationToken = crypto.randomBytes(32).toString("hex");
+      const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { isActive: true, isEmailVerified: false, passwordHash, role, username, verificationToken, verificationExpiry },
+      });
+
+      try {
+        await emailService.sendVerificationEmail(email, verificationToken, username);
+        console.log("✅ Verification email sent to:", email);
+      } catch (e) {
+        console.error("❌ Email error:", e.message);
+      }
+
+      return { email, username, role, isEmailVerified: false };
+    }
+
     const field = existing.email === email ? "email" : "username";
     const err = new Error(`${field} already in use`);
     err.statusCode = 409;
@@ -25,11 +45,12 @@ async function register({ email, username, password, role }) {
     select: { id: true, email: true, username: true, role: true, isEmailVerified: true, createdAt: true },
   });
 
-  await addEmailJob("verify_email", {
-    to: email,
-    type: "verify_email",
-    data: { token: verificationToken, username },
-  });
+  try {
+    await emailService.sendVerificationEmail(email, verificationToken, username);
+    console.log("✅ Verification email sent to:", email);
+  } catch (e) {
+    console.error("❌ Email error:", e.message);
+  }
 
   return user;
 }
@@ -50,11 +71,7 @@ async function verifyEmail(token) {
 
   await prisma.user.update({
     where: { id: user.id },
-    data: {
-      isEmailVerified: true,
-      verificationToken: null,
-      verificationExpiry: null,
-    },
+    data: { isEmailVerified: true, verificationToken: null, verificationExpiry: null },
   });
 
   return { message: "Email verified successfully" };
@@ -160,11 +177,12 @@ async function forgotPassword(email) {
     data: { resetToken, resetTokenExpiry },
   });
 
-  await addEmailJob("password_reset", {
-    to: email,
-    type: "password_reset",
-    data: { token: resetToken, username: user.username },
-  });
+  try {
+    await emailService.sendPasswordResetEmail(email, resetToken, user.username);
+    console.log("✅ Password reset email sent to:", email);
+  } catch (e) {
+    console.error("❌ Email error:", e.message);
+  }
 }
 
 async function resetPassword(token, newPassword) {
